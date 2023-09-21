@@ -1,0 +1,11 @@
+train:
+  max_epochs: 30
+embedding:
+  document_embedding:
+    type: "DocumentPoolEmbeddings"
+    config:
+      fine_tune_mode: "none"
+      pooling: "mean"
+  token_embeddings:
+    WordEmbeddings-0:
+        embeddings: "glove"
