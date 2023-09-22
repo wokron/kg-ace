@@ -1,23 +1,14 @@
 import argparse
 from pathlib import Path
 import yaml
+import os
 
 from flair.data import Corpus
 from flair.datasets import CSVClassificationCorpus
 import flair.embeddings
-from flair.models import TextClassifier
+from model import KGClassifier
 from flair.trainers import ModelTrainer
-
-
-class ReinforcementAgent:
-    def __init__(self):
-        pass
-
-    def choose_action(self):
-        pass
-
-    def learn(self, state):
-        pass
+import torch
 
 
 def get_corpus(data_folder, data_sep):
@@ -29,7 +20,6 @@ def get_corpus(data_folder, data_sep):
         label_type="label",
         delimiter=data_sep,
     )
-
     return corpus
 
 
@@ -66,7 +56,7 @@ def create_embeddings(embedding_config: dict):
 
 
 def create_model(model_config, embeddings, label_type, label_dict):
-    return TextClassifier(
+    return KGClassifier(
         embeddings, label_type, label_dictionary=label_dict, **model_config
     )
 
@@ -76,6 +66,7 @@ def train(trainer: ModelTrainer, base_path, train_config):
 
 
 def main(args, config: dict):
+    output_dir = Path(args.output_dir)
     label_type = "label"
 
     corpus = get_corpus(args.data_folder, args.data_sep)
@@ -85,16 +76,31 @@ def main(args, config: dict):
     embeddings = create_embeddings(embeddings_config)
 
     model_config = config.get("model", {})  # model is optional
-    model = create_model(model_config, embeddings, label_type, label_dict)
-
-    trainer = ModelTrainer(model, corpus)
-
-    output_dir = Path(args.output_dir)
-    model_base_path = output_dir / args.name
-
     train_config = config.get("train", {})  # train is optional
-    result = train(trainer, model_base_path, train_config)
-    print(result)
+
+    model_dir = output_dir / args.name
+
+    if os.path.exists(model_dir / "ckpt.pt"):
+        train_state = torch.load(model_dir / "ckpt.pt")
+    else:
+        train_state = {"episode": 0}
+
+    for episode in range(train_state["episode"], args.max_episodes):
+        if episode == 0:
+            model = create_model(model_config, embeddings, label_type, label_dict)
+        else:
+            model = KGClassifier.load(
+                model_dir / f"{args.name}-{episode-1:05d}" / "best-model.pt"
+            )
+
+        trainer = ModelTrainer(model, corpus)
+
+        model_base_path = model_dir / f"{args.name}-{episode:05d}"
+        result = train(trainer, model_base_path, train_config)
+        print(result)
+
+        train_state["episode"] += 1
+        torch.save(train_state, model_dir / "ckpt.pt")
 
 
 if __name__ == "__main__":
@@ -103,6 +109,7 @@ if __name__ == "__main__":
     parser.add_argument("--data_folder", default=".")
     parser.add_argument("--data_sep", default="\t")
     parser.add_argument("--output_dir", default="./output")
+    parser.add_argument("--max_episodes", type=int, default=2)
     parser.add_argument("--name", default="kg-ace")
 
     args = parser.parse_args()
