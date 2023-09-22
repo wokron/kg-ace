@@ -58,13 +58,13 @@ def main(args):
         ranks.append(rank)
     ranks = np.array(ranks)
     metrics = {}
-    for k in [1, 3, 10]:
+    for k in args.hit_at:
         hit_at_k = calc_hit_at_k(ranks, k)
         metrics[f"hit@{k}"] = hit_at_k
     metrics["mr"] = calc_mean_rank(ranks)
     metrics["mrr"] = calc_mean_reciprocal_ranking(ranks)
 
-    with open(output_dir / "eval_result.txt", "w") as f:
+    with open(output_dir / args.name / "eval_result.txt", "w") as f:
         for k in metrics.keys():
             output = f"{k} = {metrics[k]}"
             print(output)
@@ -78,8 +78,14 @@ if __name__ == "__main__":
     parser.add_argument("--entity2text_file", default="entity2text.txt")
     parser.add_argument("--relation2text_file", default="relation2text.txt")
     parser.add_argument("--entities_file", default="entities.txt")
-    parser.add_argument("--model_path", default="output/kg-ace/best-model.pt")
+    parser.add_argument("--model_path", default="best-model.pt")
     parser.add_argument("--output_dir", default="output")
+    parser.add_argument("--name", default="kg-ace")
+    parser.add_argument("--hit_at", action="store",
+        type=int,
+        nargs="*",
+        default=[1, 3, 10],
+    )
 
     args = parser.parse_args()
 
