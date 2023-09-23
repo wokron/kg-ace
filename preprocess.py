@@ -68,7 +68,7 @@ if __name__ == "__main__":
     parser.add_argument("--entity2text_file", default="entity2text.txt")
     parser.add_argument("--relation2text_file", default="relation2text.txt")
     parser.add_argument("--entities_file", default="entities.txt")
-    parser.add_argument("--pos_neg_ratio", type=int, default=5)
+    parser.add_argument("--pos_neg_ratio", type=int, default=1)
     parser.add_argument(
         "--process_targets",
         action="store",
