@@ -39,18 +39,19 @@ def main(args):
 
     ranks = []
     for eval_example in tqdm(
-        eval_examples, desc="iterate over the dataset", total=len(dataset)
+        eval_examples,
+        desc="iterate over the dataset",
+        total=len(dataset),
     ):
         pos_s = next(eval_example)
-        neg_ss = [
-            s
-            for s in tqdm(
-                eval_example,
-                desc="generate neg examples",
-                total=len(entities) - 1,
-                leave=False,
-            )
-        ]
+        neg_ss = []
+        for s in tqdm(
+            eval_example,
+            desc="generate neg examples",
+            total=len(entities) - 1,
+            leave=False,
+        ):
+            neg_ss.append(s)
 
         model.predict([pos_s] + neg_ss, return_probabilities_for_all_classes=True)
 
@@ -64,7 +65,9 @@ def main(args):
     metrics["mr"] = calc_mean_rank(ranks)
     metrics["mrr"] = calc_mean_reciprocal_ranking(ranks)
 
-    with open(output_dir / args.name / "eval_result.txt", "w") as f:
+    model_output_dir: Path = output_dir / args.name
+    model_output_dir.mkdir(parents=True, exist_ok=True)
+    with open(model_output_dir / "eval_result.txt", "w") as f:
         for k in metrics.keys():
             output = f"{k} = {metrics[k]}"
             print(output)
@@ -81,7 +84,9 @@ if __name__ == "__main__":
     parser.add_argument("--model_path", default="best-model.pt")
     parser.add_argument("--output_dir", default="output")
     parser.add_argument("--name", default="kg-ace")
-    parser.add_argument("--hit_at", action="store",
+    parser.add_argument(
+        "--hit_at",
+        action="store",
         type=int,
         nargs="*",
         default=[1, 3, 10],
