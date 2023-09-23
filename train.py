@@ -1,4 +1,5 @@
 import argparse
+import logging
 from pathlib import Path
 import yaml
 import os
@@ -9,6 +10,41 @@ import flair.embeddings
 from model import KGClassifier
 from flair.trainers import ModelTrainer
 import torch
+
+log = logging.getLogger("flair")
+
+
+class TrainState:
+    def __init__(self, save_dir: Path):
+        self.save_dir = save_dir
+        if os.path.exists(save_dir / "train_state.pt"):
+            self.load()
+        else:
+            save_dir.mkdir(exist_ok=True, parents=True)
+            self.episode = 0
+            self.action_dict = {}
+            self.best_action = None
+            self.baseline_score = 0
+            self.best_episode = -1
+            self.save()
+
+    def load(self):
+        state_dict = torch.load(self.save_dir / "train_state.pt")
+        self.episode = state_dict["episode"]
+        self.action_dict = state_dict["action_dict"]
+        self.best_action = state_dict["best_action"]
+        self.baseline_score = state_dict["baseline_score"]
+        self.best_episode = state_dict["best_episode"]
+
+    def save(self):
+        state_dict = {
+            "episode": self.episode,
+            "action_dict": self.action_dict,
+            "best_action": self.best_action,
+            "baseline_score": self.baseline_score,
+            "best_episode": self.best_episode,
+        }
+        torch.save(state_dict, self.save_dir / "train_state.pt")
 
 
 def get_corpus(data_folder, data_sep):
@@ -61,46 +97,48 @@ def create_model(model_config, embeddings, label_type, label_dict):
     )
 
 
-def train(trainer: ModelTrainer, base_path, train_config):
-    return trainer.train(base_path, **train_config)
-
-
 def main(args, config: dict):
     output_dir = Path(args.output_dir)
+    embeddings_config = config["embedding"]  # embedding is must
+    model_config = config.get("model", {})  # model is optional
+    train_config = config.get("train", {})  # train is optional
     label_type = "label"
 
     corpus = get_corpus(args.data_folder, args.data_sep)
     label_dict = corpus.make_label_dictionary(label_type=label_type)
 
-    embeddings_config = config["embedding"]  # embedding is must
     embeddings = create_embeddings(embeddings_config)
-
-    model_config = config.get("model", {})  # model is optional
-    train_config = config.get("train", {})  # train is optional
 
     model_dir = output_dir / args.name
 
-    if os.path.exists(model_dir / "ckpt.pt"):
-        train_state = torch.load(model_dir / "ckpt.pt")
+    train_state = TrainState(model_dir)
+
+    cur_episode = train_state.episode
+
+    if cur_episode == 0:
+        model = create_model(model_config, embeddings, label_type, label_dict)
     else:
-        train_state = {"episode": 0}
+        prev_trained_model_path = (
+            model_dir / f"{args.name}-{cur_episode-1:05d}" / "final-model.pt"
+        )
+        if not os.path.exists(prev_trained_model_path):
+            raise Exception()
+        model = KGClassifier.load(prev_trained_model_path)  # continue training
 
-    for episode in range(train_state["episode"], args.max_episodes):
-        if episode == 0:
-            model = create_model(model_config, embeddings, label_type, label_dict)
-        else:
-            model = KGClassifier.load(
-                model_dir / f"{args.name}-{episode-1:05d}" / "best-model.pt"
-            )
-
+    for episode in range(cur_episode, args.max_episodes):
+        log.info(f"--- start episode {episode} ---")
         trainer = ModelTrainer(model, corpus)
 
         model_base_path = model_dir / f"{args.name}-{episode:05d}"
-        result = train(trainer, model_base_path, train_config)
-        print(result)
+        result = trainer.train(model_base_path, **train_config)
+        log.info(result)
 
-        train_state["episode"] += 1
-        torch.save(train_state, model_dir / "ckpt.pt")
+        log.info(f"--- finish training of episode {episode} ---")
+
+        train_state.episode += 1
+        train_state.save()
+
+        log.info(f"--- end episode {episode} ---")
 
 
 if __name__ == "__main__":
@@ -117,7 +155,6 @@ if __name__ == "__main__":
     with open(args.config, "r") as config_file:
         config = yaml.safe_load(config_file)
 
-    print("config: ", config)
-    print("config: ", type(config))
+    log.info("config: ", config)
 
     main(args, config)
