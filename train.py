@@ -115,23 +115,22 @@ def main(args, config: dict):
 
     cur_episode = train_state.episode
 
-    if cur_episode == 0:
-        model = create_model(model_config, embeddings, label_type, label_dict)
-    else:
-        prev_trained_model_path = (
-            model_dir / f"{args.name}-{cur_episode-1:05d}" / "final-model.pt"
-        )
-        if not os.path.exists(prev_trained_model_path):
-            raise Exception()
-        model = KGClassifier.load(prev_trained_model_path)  # continue training
-
     for episode in range(cur_episode, args.max_episodes):
         log.info(f"--- start episode {episode} ---")
-        trainer = ModelTrainer(model, corpus)
-
         model_base_path = model_dir / f"{args.name}-{episode:05d}"
-        result = trainer.train(model_base_path, **train_config)
-        log.info(result)
+        if episode == 0:
+            log.info("start training a new model")
+            model = create_model(model_config, embeddings, label_type, label_dict)
+            trainer = ModelTrainer(model, corpus)
+            result = trainer.fine_tune(model_base_path, checkpoint=True, **train_config)
+        else:
+            log.info("continue training")
+            prev_trained_model_path = model_dir / f"{args.name}-{episode-1:05d}" / "checkpoint.pt"
+            model = KGClassifier.load(prev_trained_model_path)
+            trainer = ModelTrainer(model, corpus)
+            result = trainer.resume(model, train_config.get("max_epochs", 10), base_path=model_base_path)
+
+        log.info(f"result: {result}")
 
         log.info(f"--- finish training of episode {episode} ---")
 
