@@ -1,11 +1,29 @@
 train:
-  max_epochs: 30
+  max_epochs: 1
 embedding:
   document_embedding:
+    # type: "DocumentRNNEmbeddings"
     type: "DocumentPoolEmbeddings"
     config:
-      fine_tune_mode: "none"
+      # hidden_size: 256
       pooling: "mean"
   token_embeddings:
+    # FastCharacterEmbeddings:
+    #   char_embedding_dim: 25
+    #   hidden_size_char: 25
+    FastWordEmbeddings-0:
+      embeddings: glove
+      freeze: true
+    # FastWordEmbeddings-1:
+    #   embeddings: en
+    #   freeze: true
     WordEmbeddings-0:
-        embeddings: "glove"
+      embeddings: "glove"
+    # FlairEmbeddings-0:
+    #   model: en-forward
+    # FlairEmbeddings-1:
+    #   model: en-backward
+    # FlairEmbeddings-2:
+    #   model: multi-forward
+    # FlairEmbeddings-3:
+    #   model: multi-backward
