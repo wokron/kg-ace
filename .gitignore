@@ -2,3 +2,5 @@ output
 data
 __pycache__
 .vscode
+model
+preprocessed
