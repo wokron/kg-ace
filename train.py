@@ -1,14 +1,15 @@
 import argparse
 import logging
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 import yaml
 import os
 
 from flair.data import Corpus, SegtokTokenizer, Tokenizer
 from flair.datasets import CSVClassificationCorpus
 import flair.embeddings
-from model import KGClassifier
+from flair.nn import Model
+from model import KGClassifier, EmbedController, MaskStackedEmbeddings
 from flair.trainers import ModelTrainer
 import torch
 
@@ -26,7 +27,7 @@ class FlairBertTokenizer(Tokenizer):
         i = 0
         while i < len(tok_list):
             if tok_list[i] == "[":
-                result.append("".join(tok_list[i:i+3]))
+                result.append("".join(tok_list[i : i + 3]))
                 i += 2
             else:
                 result.append(tok_list[i])
@@ -46,6 +47,7 @@ class TrainState:
             self.best_action = None
             self.baseline_score = 0
             self.best_episode = -1
+            self.agent_dict = None
             self.save()
 
     def load(self):
@@ -55,6 +57,7 @@ class TrainState:
         self.best_action = state_dict["best_action"]
         self.baseline_score = state_dict["baseline_score"]
         self.best_episode = state_dict["best_episode"]
+        self.agent_dict = state_dict["agent_dict"]
 
     def save(self):
         state_dict = {
@@ -63,6 +66,7 @@ class TrainState:
             "best_action": self.best_action,
             "baseline_score": self.baseline_score,
             "best_episode": self.best_episode,
+            "agent_dict": self.agent_dict,
         }
         torch.save(state_dict, self.save_dir / "train_state.pt")
 
@@ -88,6 +92,8 @@ def create_token_embeddings_list(token_embeddings_config: dict):
         if hasattr(flair.embeddings, embed_class_name):
             embedding = getattr(flair.embeddings, embed_class_name)(**config)
             token_embeddings_list.append(embedding)
+        else:
+            raise Exception()
     return token_embeddings_list
 
 
@@ -98,6 +104,7 @@ def create_embeddings(embedding_config: dict):
     token_embeddings_list = create_token_embeddings_list(token_embeddings_config)
 
     document_embedding_class = document_embedding_config["type"]
+    mask_stack = MaskStackedEmbeddings(token_embeddings_list)
     if hasattr(flair.embeddings, document_embedding_class):
         if "Transformer" in document_embedding_class:
             embedding = getattr(flair.embeddings, document_embedding_class)(
@@ -105,17 +112,50 @@ def create_embeddings(embedding_config: dict):
             )
         else:
             embedding = getattr(flair.embeddings, document_embedding_class)(
-                embeddings=token_embeddings_list, **document_embedding_config["config"]
+                embeddings=mask_stack, **document_embedding_config["config"]
             )
-        return embedding
+        return embedding, mask_stack
     else:
-        return None
+        return None, None
 
 
 def create_model(model_config, embeddings, label_type, label_dict):
     return KGClassifier(
         embeddings, label_type, label_dictionary=label_dict, **model_config
     )
+
+
+def my_resume(
+    trainer,
+    model: Model,
+    additional_epochs: Optional[int] = None,
+    **trainer_args,
+):
+    assert model.model_card is not None
+    trainer.model = model
+    # recover all arguments that were used to train this model
+    args_used_to_train_model = model.model_card["training_parameters"]
+
+    # you can overwrite params with your own
+    for param in trainer_args:
+        args_used_to_train_model[param] = trainer_args[param]
+        if param == "optimizer" and "optimizer_state_dict" in args_used_to_train_model:
+            del args_used_to_train_model["optimizer_state_dict"]
+        if param == "scheduler" and "scheduler_state_dict" in args_used_to_train_model:
+            del args_used_to_train_model["scheduler_state_dict"]
+
+    # surface nested arguments
+    kwargs = args_used_to_train_model["kwargs"]
+    del args_used_to_train_model["kwargs"]
+
+    if additional_epochs is not None:
+        args_used_to_train_model["max_epochs"] = (
+            args_used_to_train_model.get("epoch", kwargs.get("epoch", 0))
+            + additional_epochs
+        )
+
+    # resume training with these parameters
+    return trainer.train(**args_used_to_train_model, **kwargs)
 
 
 def main(args, config: dict):
@@ -130,7 +170,7 @@ def main(args, config: dict):
     corpus = get_corpus(args.data_folder, args.data_sep, tokenizer)
     label_dict = corpus.make_label_dictionary(label_type=label_type)
 
-    embeddings = create_embeddings(embeddings_config)
+    embeddings, selection_handler = create_embeddings(embeddings_config)
 
     model_dir = output_dir / args.name
 
@@ -138,17 +178,26 @@ def main(args, config: dict):
 
     cur_episode = train_state.episode
 
+    embed_agent = EmbedController(
+        num_actions=len(embeddings_config["token_embeddings"])
+    )
+    if train_state.agent_dict is not None:
+        embed_agent.load_state_dict(train_state.agent_dict)
+
     for episode in range(cur_episode, args.max_episodes):
         log.info(f"--- start episode {episode} ---")
+        action, log_prob = embed_agent.sample(episode == 0)
+        selection_handler.set_selection(action.cpu().tolist())
+        log.info(f"selection: {action}")
+
         model_base_path = model_dir / f"{args.name}-{episode:05d}"
         if episode == 0:
             log.info("start training a new model")
             model = create_model(model_config, embeddings, label_type, label_dict)
             trainer = ModelTrainer(model, corpus)
-            result = trainer.fine_tune(
+            result = trainer.train(
                 model_base_path,
                 checkpoint=True,
-                use_final_model_for_eval=False,
                 **train_config,
             )
         else:
@@ -158,15 +207,35 @@ def main(args, config: dict):
             )
             model = KGClassifier.load(prev_trained_model_path)
             trainer = ModelTrainer(model, corpus)
-            result = trainer.resume(
-                model, train_config.get("max_epochs", 10), base_path=model_base_path
+            result = my_resume(
+                trainer,
+                model,
+                train_config.get("max_epochs", 10),
+                base_path=model_base_path,
             )
 
         log.info(f"result: {result}")
-
         log.info(f"--- finish training of episode {episode} ---")
 
+        score = max(result["dev_score_history"])
+        embed_agent.learn(
+            score,
+            train_state.action_dict,
+            action,
+            log_prob,
+            first_episode=(episode == 0),
+        )
+        action_key = tuple(action.cpu().tolist())
+        if action_key not in train_state.action_dict.keys():
+            train_state.action_dict[action_key] = {
+                "counts": 0,
+                "scores": [],
+            }
+        train_state.action_dict[action_key]["counts"] += 1
+        train_state.action_dict[action_key]["scores"].append(score)
         train_state.episode += 1
+        train_state.agent_dict = embed_agent.state_dict()
+
         train_state.save()
 
         log.info(f"--- end episode {episode} ---")
