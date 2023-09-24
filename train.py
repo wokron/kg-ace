@@ -1,10 +1,11 @@
 import argparse
 import logging
 from pathlib import Path
+from typing import List
 import yaml
 import os
 
-from flair.data import Corpus
+from flair.data import Corpus, SegtokTokenizer, Tokenizer
 from flair.datasets import CSVClassificationCorpus
 import flair.embeddings
 from model import KGClassifier
@@ -12,6 +13,25 @@ from flair.trainers import ModelTrainer
 import torch
 
 log = logging.getLogger("flair")
+
+
+class FlairBertTokenizer(Tokenizer):
+    def __init__(self):
+        super().__init__()
+        self.tokenizer = SegtokTokenizer()
+
+    def tokenize(self, text: str) -> List[str]:
+        tok_list = self.tokenizer.tokenize(text)
+        result = []
+        i = 0
+        while i < len(tok_list):
+            if tok_list[i] == "[":
+                result.append("".join(tok_list[i:i+3]))
+                i += 2
+            else:
+                result.append(tok_list[i])
+            i += 1
+        return result
 
 
 class TrainState:
@@ -47,7 +67,7 @@ class TrainState:
         torch.save(state_dict, self.save_dir / "train_state.pt")
 
 
-def get_corpus(data_folder, data_sep):
+def get_corpus(data_folder, data_sep, tokenizer: Tokenizer):
     column_name_map = {1: "text", 2: "label"}
     corpus: Corpus = CSVClassificationCorpus(
         data_folder,
@@ -55,6 +75,7 @@ def get_corpus(data_folder, data_sep):
         skip_header=True,
         label_type="label",
         delimiter=data_sep,
+        tokenizer=tokenizer,
     )
     return corpus
 
@@ -72,7 +93,7 @@ def create_token_embeddings_list(token_embeddings_config: dict):
 
 def create_embeddings(embedding_config: dict):
     document_embedding_config = embedding_config["document_embedding"]
-    token_embeddings_config = embedding_config["token_embeddings"]
+    token_embeddings_config = embedding_config.get("token_embeddings", {})
 
     token_embeddings_list = create_token_embeddings_list(token_embeddings_config)
 
@@ -104,7 +125,9 @@ def main(args, config: dict):
     train_config = config.get("train", {})  # train is optional
     label_type = "label"
 
-    corpus = get_corpus(args.data_folder, args.data_sep)
+    tokenizer = FlairBertTokenizer()
+
+    corpus = get_corpus(args.data_folder, args.data_sep, tokenizer)
     label_dict = corpus.make_label_dictionary(label_type=label_type)
 
     embeddings = create_embeddings(embeddings_config)
@@ -122,13 +145,22 @@ def main(args, config: dict):
             log.info("start training a new model")
             model = create_model(model_config, embeddings, label_type, label_dict)
             trainer = ModelTrainer(model, corpus)
-            result = trainer.fine_tune(model_base_path, checkpoint=True, **train_config)
+            result = trainer.fine_tune(
+                model_base_path,
+                checkpoint=True,
+                use_final_model_for_eval=False,
+                **train_config,
+            )
         else:
             log.info("continue training")
-            prev_trained_model_path = model_dir / f"{args.name}-{episode-1:05d}" / "checkpoint.pt"
+            prev_trained_model_path = (
+                model_dir / f"{args.name}-{episode-1:05d}" / "checkpoint.pt"
+            )
             model = KGClassifier.load(prev_trained_model_path)
             trainer = ModelTrainer(model, corpus)
-            result = trainer.resume(model, train_config.get("max_epochs", 10), base_path=model_base_path)
+            result = trainer.resume(
+                model, train_config.get("max_epochs", 10), base_path=model_base_path
+            )
 
         log.info(f"result: {result}")
 

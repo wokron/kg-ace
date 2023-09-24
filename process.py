@@ -30,13 +30,13 @@ def process_dataset(dataset_raw, entity2text, relation2text, hidde_bar: bool = F
 
         dataset_processed.rename(columns={"text": "text_relation"}, inplace=True)
         dataset_processed["text"] = (
-            "CLS "
+            "[CLS] "
             + dataset_processed["text_head"]
-            + " SEP "
+            + " [SEP] "
             + dataset_processed["text_relation"]
-            + " SEP "
+            + " [SEP] "
             + dataset_processed["text_tail"]
-            + " SEP"
+            + " [SEP]"
         )
 
         process_bar.update(1)
