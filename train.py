@@ -195,7 +195,17 @@ def main(args, config: dict):
         log.info(f"selection: {action}")
 
         model_base_path = model_dir / f"{args.name}-{episode:05d}"
-        if episode == 0:
+        if os.path.exists(model_base_path / "checkpoint.pt"):
+            log.info("continue epoch training")
+            model = KGClassifier.load(model_base_path / "checkpoint.pt")
+            model.embeddings.selection = action
+            trainer = ModelTrainer(model, corpus)
+            result = my_resume(
+                trainer,
+                model,
+                base_path=model_base_path,
+            )
+        elif episode == 0:
             log.info("start training a new model")
             model = create_model(model_config, embeddings, label_type, label_dict)
             model.embeddings.selection = action
@@ -224,7 +234,7 @@ def main(args, config: dict):
         log.info(f"result: {result}")
         log.info(f"--- finish training of episode {episode} ---")
 
-        score = max(result["dev_score_history"])
+        score = max(result["dev_score_history"] + [0.0])
         embed_agent.learn(
             score,
             train_state.action_dict,
