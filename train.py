@@ -9,6 +9,7 @@ from flair.data import Corpus, SegtokTokenizer, Tokenizer
 from flair.datasets import CSVClassificationCorpus
 from flair.samplers import ImbalancedClassificationDatasetSampler
 import flair.embeddings
+import embeddings
 from flair.nn import Model
 from model import KGClassifier, EmbedController
 from flair.trainers import ModelTrainer
@@ -111,7 +112,11 @@ def create_embeddings(embedding_config: dict):
                 **document_embedding_config["config"]
             )
         else:
-            embedding = getattr(flair.embeddings, document_embedding_class)(
+            if document_embedding_class in ["DocumentPoolEmbeddings", "DocumentRNNEmbeddings"]:
+                module = embeddings
+            else:
+                module = flair.embeddings
+            embedding = getattr(module, document_embedding_class)(
                 embeddings=token_embeddings_list, **document_embedding_config["config"]
             )
         return embedding
@@ -193,6 +198,7 @@ def main(args, config: dict):
         if episode == 0:
             log.info("start training a new model")
             model = create_model(model_config, embeddings, label_type, label_dict)
+            model.embeddings.selection = action
             trainer = ModelTrainer(model, corpus)
             result = trainer.train(
                 model_base_path,
@@ -206,6 +212,7 @@ def main(args, config: dict):
                 model_dir / f"{args.name}-{episode-1:05d}" / "checkpoint.pt"
             )
             model = KGClassifier.load(prev_trained_model_path)
+            model.embeddings.selection = action
             trainer = ModelTrainer(model, corpus)
             result = my_resume(
                 trainer,
