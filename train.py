@@ -7,9 +7,10 @@ import os
 
 from flair.data import Corpus, SegtokTokenizer, Tokenizer
 from flair.datasets import CSVClassificationCorpus
+from flair.samplers import ImbalancedClassificationDatasetSampler
 import flair.embeddings
 from flair.nn import Model
-from model import KGClassifier, EmbedController, MaskStackedEmbeddings
+from model import KGClassifier, EmbedController
 from flair.trainers import ModelTrainer
 import torch
 
@@ -104,7 +105,6 @@ def create_embeddings(embedding_config: dict):
     token_embeddings_list = create_token_embeddings_list(token_embeddings_config)
 
     document_embedding_class = document_embedding_config["type"]
-    mask_stack = MaskStackedEmbeddings(token_embeddings_list)
     if hasattr(flair.embeddings, document_embedding_class):
         if "Transformer" in document_embedding_class:
             embedding = getattr(flair.embeddings, document_embedding_class)(
@@ -112,9 +112,9 @@ def create_embeddings(embedding_config: dict):
             )
         else:
             embedding = getattr(flair.embeddings, document_embedding_class)(
-                embeddings=mask_stack, **document_embedding_config["config"]
+                embeddings=token_embeddings_list, **document_embedding_config["config"]
             )
-        return embedding, mask_stack
+        return embedding
     else:
         return None, None
 
@@ -126,7 +126,7 @@ def create_model(model_config, embeddings, label_type, label_dict):
 
 
 def my_resume(
-    trainer,
+    trainer: ModelTrainer,
     model: Model,
     additional_epochs: Optional[int] = None,
     **trainer_args,
@@ -170,7 +170,7 @@ def main(args, config: dict):
     corpus = get_corpus(args.data_folder, args.data_sep, tokenizer)
     label_dict = corpus.make_label_dictionary(label_type=label_type)
 
-    embeddings, selection_handler = create_embeddings(embeddings_config)
+    embeddings = create_embeddings(embeddings_config)
 
     model_dir = output_dir / args.name
 
@@ -187,7 +187,6 @@ def main(args, config: dict):
     for episode in range(cur_episode, args.max_episodes):
         log.info(f"--- start episode {episode} ---")
         action, log_prob = embed_agent.sample(episode == 0)
-        selection_handler.set_selection(action.cpu().tolist())
         log.info(f"selection: {action}")
 
         model_base_path = model_dir / f"{args.name}-{episode:05d}"
@@ -198,6 +197,7 @@ def main(args, config: dict):
             result = trainer.train(
                 model_base_path,
                 checkpoint=True,
+                sampler=ImbalancedClassificationDatasetSampler,
                 **train_config,
             )
         else:

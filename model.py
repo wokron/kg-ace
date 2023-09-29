@@ -113,30 +113,3 @@ class EmbedController(torch.nn.Module):
     def get_value(self):
         value = self.selector
         return value
-
-
-@register_embeddings
-class MaskStackedEmbeddings(StackedEmbeddings):
-    def __init__(self, embeddings: List[TokenEmbeddings], overwrite_names: bool = True):
-        super().__init__(embeddings, overwrite_names)
-        self.selection = None
-
-    def set_selection(self, selection):
-        self.selection = selection
-
-    def embed(
-        self, sentences: Union[Sentence, List[Sentence]], static_embeddings: bool = True
-    ):
-        # if only one sentence is passed, convert to list of sentence
-        if type(sentences) is Sentence:
-            sentences = [sentences]
-
-        for embedding, select in zip(self.embeddings, self.selection):
-            if select == 0:
-                tokens = [token for sentence in sentences for token in sentence.tokens]
-                for token in tokens:
-                    token.set_embedding(
-                        embedding.name, torch.tensor([0] * embedding.embedding_length)
-                    )
-            else:
-                embedding.embed(sentences)
