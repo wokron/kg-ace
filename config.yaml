@@ -1,18 +1,20 @@
 train:
-  max_epochs: 1
-  learning_rate: 0.00005
-  mini_batch_size: 32
+  max_epochs: 30
+  # learning_rate: 0.00005
+  # mini_batch_size: 32
 embedding:
   document_embedding:
-    # type: "DocumentRNNEmbeddings"
+    type: "DocumentRNNEmbeddings"
     # type: "DocumentLSTMEmbeddings"
-    type: "DocumentPoolEmbeddings"
+    # type: "DocumentPoolEmbeddings"
     # type: "TransformerWordEmbeddings"
     config:
       # hidden_size: 512
       # hidden_size: 800
-      # rnn_type: "LSTM"
-      pooling: "mean"
+      rnn_type: "LSTM"
+      hidden_size: 256
+      rnn_layers: 2
+      # pooling: "mean"
       # model: "/home/wokron/Code/Projects/kg-ace/model/bert-base-uncased"
       # layers: "all"
       # local_files_only: True
