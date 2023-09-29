@@ -30,6 +30,7 @@ class DocumentPoolEmbeddings(DocumentEmbeddings):
         embeddings: Union[TokenEmbeddings, List[TokenEmbeddings]],
         fine_tune_mode: str = "none",
         pooling: str = "mean",
+        selection = None,
     ):
         """The constructor takes a list of embeddings to be combined.
         :param embeddings: a list of token embeddings
@@ -39,7 +40,7 @@ class DocumentPoolEmbeddings(DocumentEmbeddings):
         """
         super().__init__()
 
-        self.selection = None  # this is important
+        self.selection = selection  # this is important
 
         if isinstance(embeddings, StackedEmbeddings):
             embeddings = embeddings.embeddings
@@ -125,13 +126,15 @@ class DocumentPoolEmbeddings(DocumentEmbeddings):
     @classmethod
     def from_params(cls, params: Dict[str, Any]) -> "DocumentPoolEmbeddings":
         embeddings = cast(StackedEmbeddings, load_embeddings(params.pop("embeddings"))).embeddings
-        return cls(embeddings=embeddings, **params)
+        selection = params.pop("selection")
+        return cls(embeddings=embeddings, selection=selection, **params)
 
     def to_params(self) -> Dict[str, Any]:
         return {
             "pooling": self.pooling,
             "fine_tune_mode": self.fine_tune_mode,
             "embeddings": self.embeddings.save_embeddings(False),
+            "selection": self.selection
         }
     
 
@@ -150,6 +153,7 @@ class DocumentRNNEmbeddings(DocumentEmbeddings):
         locked_dropout: float = 0.0,
         rnn_type="GRU",
         fine_tune: bool = True,
+        selection = None,
     ):
         """The constructor takes a list of embeddings to be combined.
         :param embeddings: a list of token embeddings
@@ -167,7 +171,7 @@ class DocumentRNNEmbeddings(DocumentEmbeddings):
         """
         super().__init__()
 
-        self.selection = None
+        self.selection = selection
 
         self.embeddings: StackedEmbeddings = StackedEmbeddings(embeddings=embeddings)
 
@@ -344,6 +348,7 @@ class DocumentRNNEmbeddings(DocumentEmbeddings):
             "locked_dropout": self.locked_dropout.p if self.locked_dropout is not None else 0.0,
             "rnn_type": self.rnn_type,
             "fine_tune": not self.static_embeddings,
+            "selection": self.selection,
         }
 
         return model_state
@@ -364,6 +369,7 @@ class DocumentRNNEmbeddings(DocumentEmbeddings):
             locked_dropout=params["locked_dropout"],
             rnn_type=params["rnn_type"],
             fine_tune=params["fine_tune"],
+            selection=params["selection"],
         )
 
     def __setstate__(self, d):
@@ -380,6 +386,7 @@ class DocumentRNNEmbeddings(DocumentEmbeddings):
             locked_dropout=d["locked_dropout"],
             rnn_type=d["rnn_type"],
             fine_tune=d["fine_tune"],
+            selection=d["selection"],
         )
 
         # special handling for deserializing language models
