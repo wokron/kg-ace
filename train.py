@@ -106,17 +106,16 @@ def create_embeddings(embedding_config: dict):
     token_embeddings_list = create_token_embeddings_list(token_embeddings_config)
 
     document_embedding_class = document_embedding_config["type"]
-    if hasattr(flair.embeddings, document_embedding_class):
+    if hasattr(embeddings, "My" + document_embedding_class):
+        embedding = getattr(embeddings, "My" + document_embedding_class)(embeddings=token_embeddings_list, **document_embedding_config["config"])
+        return embedding
+    elif hasattr(flair.embeddings, document_embedding_class):
         if "Transformer" in document_embedding_class:
             embedding = getattr(flair.embeddings, document_embedding_class)(
                 **document_embedding_config["config"]
             )
         else:
-            if document_embedding_class in ["DocumentPoolEmbeddings", "DocumentRNNEmbeddings"]:
-                module = embeddings
-            else:
-                module = flair.embeddings
-            embedding = getattr(module, document_embedding_class)(
+            embedding = getattr(flair.embeddings, document_embedding_class)(
                 embeddings=token_embeddings_list, **document_embedding_config["config"]
             )
         return embedding

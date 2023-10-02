@@ -16,6 +16,7 @@ from process import (
 )
 import numpy as np
 from tqdm import tqdm
+import embeddings # don't remove this!!!
 
 
 def main(args):
@@ -36,6 +37,7 @@ def main(args):
     )
 
     model = KGClassifier.load(args.model_path)
+    assert hasattr(model.embeddings, "selection")
 
     ranks = []
     for eval_example in tqdm(

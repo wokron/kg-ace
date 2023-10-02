@@ -24,7 +24,7 @@ log = logging.getLogger("flair")
 
 
 @register_embeddings
-class DocumentPoolEmbeddings(DocumentEmbeddings):
+class MyDocumentPoolEmbeddings(DocumentEmbeddings):
     def __init__(
         self,
         embeddings: Union[TokenEmbeddings, List[TokenEmbeddings]],
@@ -124,7 +124,7 @@ class DocumentPoolEmbeddings(DocumentEmbeddings):
         return f"fine_tune_mode={self.fine_tune_mode}, pooling={self.pooling}"
 
     @classmethod
-    def from_params(cls, params: Dict[str, Any]) -> "DocumentPoolEmbeddings":
+    def from_params(cls, params: Dict[str, Any]) -> "MyDocumentPoolEmbeddings":
         embeddings = cast(StackedEmbeddings, load_embeddings(params.pop("embeddings"))).embeddings
         selection = params.pop("selection")
         return cls(embeddings=embeddings, selection=selection, **params)
@@ -139,7 +139,7 @@ class DocumentPoolEmbeddings(DocumentEmbeddings):
     
 
 @register_embeddings
-class DocumentRNNEmbeddings(DocumentEmbeddings):
+class MyDocumentRNNEmbeddings(DocumentEmbeddings):
     def __init__(
         self,
         embeddings: List[TokenEmbeddings],
@@ -354,7 +354,7 @@ class DocumentRNNEmbeddings(DocumentEmbeddings):
         return model_state
 
     @classmethod
-    def from_params(cls, params: Dict[str, Any]) -> "DocumentRNNEmbeddings":
+    def from_params(cls, params: Dict[str, Any]) -> "MyDocumentRNNEmbeddings":
         stacked_embeddings = load_embeddings(params["embeddings"])
         assert isinstance(stacked_embeddings, StackedEmbeddings)
         return cls(
@@ -374,7 +374,7 @@ class DocumentRNNEmbeddings(DocumentEmbeddings):
 
     def __setstate__(self, d):
         # re-initialize language model with constructor arguments
-        language_model = DocumentRNNEmbeddings(
+        language_model = MyDocumentRNNEmbeddings(
             embeddings=d["embeddings"],
             hidden_size=d["hidden_size"],
             rnn_layers=d["rnn_layers"],
