@@ -24,8 +24,19 @@ embedding:
       model: "/home/wokron/Code/Projects/kg-ace/model/bert-base-uncased"
       layers: -1,-2,-3,-4
       pooling_operation: mean
+    TransformerWordEmbeddings-2:
+      model: bert-base-multilingual-cased # todo: need modify
+      layers: -1,-2,-3,-4
+      pooling_operation: mean
+    # ELMoEmbeddings-0: # todo: need `pip install allennlp==0.9.0` but allennlp no longer support
+    #   model: original
+    CharacterEmbeddings:
+      char_embedding_dim: 25
+      hidden_size_char: 25
     WordEmbeddings-0:
       embeddings: "glove"
+    WordEmbeddings-1:
+      embeddings: en
     FlairEmbeddings-0:
       model: en-forward
     FlairEmbeddings-1:
@@ -34,8 +45,9 @@ embedding:
       model: multi-forward
     FlairEmbeddings-3:
       model: multi-backward
-    TransformerWordEmbeddings-0:
-      model: "/home/wokron/Code/Projects/kg-ace/model/bert-base-uncased"
-      layers: -1,-2
+    TransformerWordEmbeddings-0: 
+      layers: '-1'
+      pooling_operation: first
+      model: xlm-roberta-large-finetuned-conll03-english # todo: need modify
 model:
   dropout: 0.1
