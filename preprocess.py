@@ -81,7 +81,7 @@ if __name__ == "__main__":
         action="store",
         type=str,
         nargs="*",
-        default=["train", "dev"],
+        default=["train", "dev", "test"],
     )
     parser.add_argument("--output_dir", default=".")
     parser.add_argument("--output_suffix", default="_processed")
