@@ -4,7 +4,7 @@ from flair.embeddings import DocumentEmbeddings, TokenEmbeddings, StackedEmbeddi
 import torch
 from torch import nn
 import flair
-from typing import Union, List
+from typing import Literal, Union, List
 from flair.embeddings.base import register_embeddings
 
 
@@ -48,6 +48,7 @@ class EmbedController(torch.nn.Module):
         num_actions: int,
         discount: float = 0.5,
         optimizer_class=torch.optim.Adam,
+        mode: Literal["DEFAULT", "ALL", "RANDOM"] = "DEFAULT",
         optimizer_kwargs: dict = {"lr": 0.1},
     ):
         super(EmbedController, self).__init__()
@@ -57,26 +58,44 @@ class EmbedController(torch.nn.Module):
         self.optimizer = optimizer_class(self.parameters(), **optimizer_kwargs)
         self.previous_action = None
         self.best_action = None
+        self.mode = mode
+
         self.to(flair.device)
 
     def sample(self, first_episode=False):
-        if first_episode:
-            log_prob = torch.log(torch.sigmoid(self.get_value()))
-            action = torch.ones(self.num_actions)
+        if self.mode == "DEFAULT":
+            return self.__default_sample(first_episode)
+        elif self.mode == "ALL":
+            return self.__all_one_sample()
+        elif self.mode == "RANDOM":
+            return self.__random_sample()
         else:
-            value = self.get_value()
-            one_prob = torch.sigmoid(value)
-            m = torch.distributions.Bernoulli(one_prob)
-            # avoid all values are 0, or avoid the selection is the same as previous iteration in training
-            action = m.sample()
-            while action.sum() == 0 or (
-                self.previous_action is not None
-                and (self.previous_action == action).all()
-            ):
-                action = m.sample()
+            raise Exception("invalid sample mode")
 
-            log_prob = m.log_prob(action)
-            self.previous_action = action.clone()
+    def __default_sample(self, first_episode=False):
+        if first_episode:
+            return self.__all_one_sample()
+        else:
+            return self.__random_sample()
+
+    def __random_sample(self):
+        value = self.get_value()
+        one_prob = torch.sigmoid(value)
+        m = torch.distributions.Bernoulli(one_prob)
+        # avoid all values are 0, or avoid the selection is the same as previous iteration in training
+        action = m.sample()
+        while action.sum() == 0 or (
+            self.previous_action is not None and (self.previous_action == action).all()
+        ):
+            action = m.sample()
+
+        log_prob = m.log_prob(action)
+        self.previous_action = action.clone()
+        return action, log_prob
+
+    def __all_one_sample(self):
+        log_prob = torch.log(torch.sigmoid(self.get_value()))
+        action = torch.ones(self.num_actions)
         return action, log_prob
 
     def learn(
@@ -87,6 +106,9 @@ class EmbedController(torch.nn.Module):
         log_prob: torch.Tensor,
         first_episode: bool = False,
     ):
+        if self.mode != "DEFAULT":
+            return
+
         if first_episode:
             self.best_action = cur_action
         else:

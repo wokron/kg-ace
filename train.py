@@ -1,7 +1,7 @@
 import argparse
 import logging
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Literal, Optional
 import yaml
 import os
 
@@ -183,7 +183,8 @@ def main(args, config: dict):
     cur_episode = train_state.episode
 
     embed_agent = EmbedController(
-        num_actions=len(embeddings_config["token_embeddings"])
+        num_actions=len(embeddings_config["token_embeddings"]),
+        mode=args.select_mode
     )
     if train_state.agent_dict is not None:
         embed_agent.load_state_dict(train_state.agent_dict)
@@ -265,6 +266,7 @@ if __name__ == "__main__":
     parser.add_argument("--output_dir", default="./output")
     parser.add_argument("--max_episodes", type=int, default=10)
     parser.add_argument("--name", default="kg-ace")
+    parser.add_argument("--select_mode", type=str, default="DEFAULT")
 
     args = parser.parse_args()
 
