@@ -1,11 +1,11 @@
 import argparse
 import logging
 from pathlib import Path
-from typing import List, Literal, Optional
+from typing import Optional
 import yaml
 import os
 
-from flair.data import Corpus, SegtokTokenizer, Tokenizer
+from flair.data import Corpus, Tokenizer
 from flair.datasets import CSVClassificationCorpus
 from flair.samplers import ImbalancedClassificationDatasetSampler
 import flair.embeddings
@@ -13,30 +13,13 @@ import embeddings
 from flair.nn import Model
 from model import KGClassifier, EmbedController
 from flair.trainers import ModelTrainer
+from tokenizer import FlairBertTokenizer
 import torch
 
 log = logging.getLogger("flair")
 
-#将文本进行分词处理
-class FlairBertTokenizer(Tokenizer):
-    def __init__(self):
-        super().__init__()
-        self.tokenizer = SegtokTokenizer()
 
-    def tokenize(self, text: str) -> List[str]:
-        tok_list = self.tokenizer.tokenize(text)
-        result = []
-        i = 0
-        while i < len(tok_list):
-            if tok_list[i] == "[":
-                result.append("".join(tok_list[i : i + 3]))
-                i += 2
-            else:
-                result.append(tok_list[i])
-            i += 1
-        return result
-
-#保存加载
+# 保存加载
 class TrainState:
     def __init__(self, save_dir: Path):
         self.save_dir = save_dir
@@ -72,7 +55,8 @@ class TrainState:
         }
         torch.save(state_dict, self.save_dir / "train_state.pt")
 
-#创建一个分类任务的语料库
+
+# 创建一个分类任务的语料库
 def get_corpus(data_folder, data_sep, tokenizer: Tokenizer):
     column_name_map = {1: "text", 2: "label"}
     corpus: Corpus = CSVClassificationCorpus(
@@ -85,7 +69,8 @@ def get_corpus(data_folder, data_sep, tokenizer: Tokenizer):
     )
     return corpus
 
-#根据提供的配置信息，创建并返回一组标记嵌入对象的列表
+
+# 根据提供的配置信息，创建并返回一组标记嵌入对象的列表
 def create_token_embeddings_list(token_embeddings_config: dict):
     token_embeddings_list = []
     for embed_name in token_embeddings_config.keys():
@@ -107,7 +92,9 @@ def create_embeddings(embedding_config: dict):
 
     document_embedding_class = document_embedding_config["type"]
     if hasattr(embeddings, "My" + document_embedding_class):
-        embedding = getattr(embeddings, "My" + document_embedding_class)(embeddings=token_embeddings_list, **document_embedding_config["config"])
+        embedding = getattr(embeddings, "My" + document_embedding_class)(
+            embeddings=token_embeddings_list, **document_embedding_config["config"]
+        )
         return embedding
     elif hasattr(flair.embeddings, document_embedding_class):
         if "Transformer" in document_embedding_class:
@@ -122,13 +109,15 @@ def create_embeddings(embedding_config: dict):
     else:
         return None, None
 
-#据提供的配置信息和输入参数创建一个 KGClassifier 模型对象，并将其返回。
+
+# 据提供的配置信息和输入参数创建一个 KGClassifier 模型对象，并将其返回。
 def create_model(model_config, embeddings, label_type, label_dict):
     return KGClassifier(
         embeddings, label_type, label_dictionary=label_dict, **model_config
     )
 
-#这个函数的作用是允许用户在原有模型训练的基础上进行继续训练，并且可以通过传入额外的参数来改变或增加训练参数，例如增加额外的训练轮数等。
+
+# 这个函数的作用是允许用户在原有模型训练的基础上进行继续训练，并且可以通过传入额外的参数来改变或增加训练参数，例如增加额外的训练轮数等。
 def my_resume(
     trainer: ModelTrainer,
     model: Model,
@@ -161,7 +150,8 @@ def my_resume(
     # resume training with these parameters
     return trainer.train(**args_used_to_train_model, **kwargs)
 
-#主函数
+
+# 主函数
 def main(args, config: dict):
     output_dir = Path(args.output_dir)
     embeddings_config = config["embedding"]  # embedding is must
@@ -183,8 +173,7 @@ def main(args, config: dict):
     cur_episode = train_state.episode
 
     embed_agent = EmbedController(
-        num_actions=len(embeddings_config["token_embeddings"]),
-        mode=args.select_mode
+        num_actions=len(embeddings_config["token_embeddings"]), mode=args.select_mode
     )
     if train_state.agent_dict is not None:
         embed_agent.load_state_dict(train_state.agent_dict)
@@ -270,7 +259,9 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    with open(args.config, "r", encoding='UTF-8') as config_file:   #加了, encoding='UTF-8'
+    with open(
+        args.config, "r", encoding="UTF-8"
+    ) as config_file:  # 加了, encoding='UTF-8'
         config = yaml.safe_load(config_file)
 
     log.info("config: ", config)

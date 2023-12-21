@@ -2,6 +2,7 @@ import random
 import pandas as pd
 from tqdm import tqdm
 from flair.data import Sentence
+from tokenizer import FlairBertTokenizer
 
 
 def process_dataset(dataset_raw, entity2text, relation2text, hidde_bar: bool = False):
@@ -122,6 +123,8 @@ def generate_negative_example(
     dataset.drop_duplicates()
 
 
+process_tokenizer = FlairBertTokenizer()
+
 def generate_sentence_eval_examples(
     row: pd.Series,
     entity2text: pd.DataFrame,
@@ -167,7 +170,7 @@ def generate_sentence_eval_examples(
     )
 
     for index, row in processed_table.iterrows():
-        yield Sentence(row["text"])
+        yield Sentence(row["text"], use_tokenizer=process_tokenizer)
 
 
 def generate_eval_examples(
